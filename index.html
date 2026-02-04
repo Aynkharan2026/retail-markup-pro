@@ -5,26 +5,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Esso Retail Terminal v2.1</title>
     
-    <!-- Stable Production Dependencies -->
+    <!-- Stable Dependencies -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://unpkg.com/lucide@0.475.0/dist/umd/lucide.min.js"></script>
     
     <style>
         :root { --esso-red: #ed1c24; --esso-blue: #003399; }
-        body, html { margin: 0; padding: 0; background-color: #f1f5f9; font-family: sans-serif; height: 100%; overflow: hidden; }
+        body, html { margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, sans-serif; height: 100%; overflow: hidden; }
         #root { height: 100%; }
 
+        /* Print Specific Logic */
         @media print {
-            body { background: white !important; overflow: visible !important; }
+            body { background: white !important; overflow: visible !important; height: auto !important; }
             .no-print { display: none !important; }
             #print-area { display: block !important; position: absolute; top: 0; left: 0; width: 100%; }
-            @page { margin: 0.5in; size: auto; }
+            @page { margin: 0; size: auto; }
         }
 
         #print-area { display: none; background: white; }
+        
+        /* Custom Input Styling */
+        .esso-input {
+            width: 100%; background: #f8fafc; border: 2px solid #f1f5f9; border-radius: 12px;
+            padding: 12px; font-weight: 800; color: #003399; outline: none; transition: all 0.2s;
+        }
+        .esso-input:focus { border-color: #003399; background: white; }
     </style>
 <script type="importmap">
 {
@@ -41,20 +48,18 @@
     <div id="print-area"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
-
-        // Helper to get Lucide Icons safely
-        const Icon = ({ name, size = 16, className = "" }) => {
-            const [svg, setSvg] = useState("");
-            useEffect(() => {
-                if (window.lucide) {
-                    const iconSvg = window.lucide.createIcons();
-                }
-            }, []);
-            return <i data-lucide={name} style={{ width: size, height: size }} className={className}></i>;
-        };
+        const { useState, useEffect } = React;
 
         const ESSO_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/2/22/Esso_textlogo.svg";
+
+        const AVERY_PRESETS = {
+            esso_standard: { columns: 2, rows: 3, labelHeight: 3.4, labelWidth: 4.25, marginTop: 0.25, marginLeft: 0, fontSizeName: 28, fontSizePrice: 85 },
+            avery_5160: { columns: 3, rows: 10, labelHeight: 1.0, labelWidth: 2.625, marginTop: 0.5, marginLeft: 0.19, fontSizeName: 10, fontSizePrice: 24 },
+            avery_5163: { columns: 2, rows: 5, labelHeight: 2.0, labelWidth: 4.0, marginTop: 0.5, marginLeft: 0.16, fontSizeName: 18, fontSizePrice: 48 },
+            avery_5164: { columns: 2, rows: 3, labelHeight: 3.33, labelWidth: 4.0, marginTop: 0.5, marginLeft: 0.25, fontSizeName: 28, fontSizePrice: 80 }
+        };
+
+        // --- SUB-COMPONENTS ---
 
         const PricingCalculator = ({ onSave, editingItem, onCancel }) => {
             const [name, setName] = useState('');
@@ -64,10 +69,8 @@
 
             useEffect(() => {
                 if (editingItem) {
-                    setName(editingItem.name);
-                    setCost(editingItem.costPrice.toString());
-                    setSale(editingItem.salePrice.toString());
-                    setMargin(editingItem.marginPercent.toString());
+                    setName(editingItem.name); setCost(editingItem.costPrice.toString());
+                    setSale(editingItem.salePrice.toString()); setMargin(editingItem.marginPercent.toString());
                 } else {
                     setName(''); setCost(''); setSale(''); setMargin('');
                 }
@@ -90,92 +93,106 @@
             const profit = (parseFloat(sale) || 0) - (parseFloat(cost) || 0);
 
             return (
-                <div className="space-y-4">
+                <div className="space-y-4 animate-in fade-in duration-500">
                     <div className="flex justify-between items-center">
-                        <h2 className="text-xl font-black text-[#003399] italic uppercase italic">Pricing Console</h2>
-                        {editingItem && <button onClick={onCancel} className="text-[10px] font-bold text-slate-400 border px-2 py-1 rounded">Discard</button>}
+                        <h2 className="text-xl font-black text-[#003399] uppercase italic">Pricing Console</h2>
+                        {editingItem && <button onClick={onCancel} className="text-[10px] font-bold text-slate-400 border px-3 py-1 rounded-lg">Discard</button>}
                     </div>
-                    <div className="bg-white p-6 rounded-[2rem] shadow-xl space-y-4 border border-slate-100">
-                        <input type="text" placeholder="Product Name" value={name} onChange={e => setName(e.target.value)} className="w-full bg-slate-50 p-4 rounded-2xl border-2 border-slate-100 font-bold focus:border-[#003399] outline-none" />
-                        <div className="space-y-3">
-                            <div className="bg-slate-50 p-3 rounded-xl">
-                                <label className="text-[9px] font-black text-slate-400 uppercase">Unit Cost ($)</label>
-                                <input type="number" value={cost} onChange={e => calc('cost', e.target.value)} className="w-full bg-transparent text-xl font-black text-[#003399] outline-none" />
+                    <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-100 space-y-4">
+                        <input type="text" placeholder="Product Name (e.g. Regular 87)" value={name} onChange={e => setName(e.target.value)} className="esso-input text-lg" />
+                        <div className="grid grid-cols-1 gap-3">
+                            <div className="bg-slate-50 p-3 rounded-2xl">
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Base Cost ($)</label>
+                                <input type="number" value={cost} onChange={e => calc('cost', e.target.value)} className="w-full bg-transparent text-2xl font-black text-[#003399] outline-none" />
                             </div>
-                            <div className="bg-[#ed1c24]/5 p-3 rounded-xl border-2 border-[#ed1c24]/20">
-                                <label className="text-[9px] font-black text-[#ed1c24] uppercase">Retail Price ($)</label>
-                                <input type="number" value={sale} onChange={e => calc('sale', e.target.value)} className="w-full bg-transparent text-xl font-black text-[#ed1c24] outline-none" />
+                            <div className="bg-[#ed1c24]/5 p-3 rounded-2xl border-2 border-[#ed1c24]/20">
+                                <label className="text-[9px] font-black text-[#ed1c24] uppercase tracking-widest ml-1">Retail Price ($)</label>
+                                <input type="number" value={sale} onChange={e => calc('sale', e.target.value)} className="w-full bg-transparent text-2xl font-black text-[#ed1c24] outline-none" />
                             </div>
-                            <div className="bg-slate-50 p-3 rounded-xl">
-                                <label className="text-[9px] font-black text-slate-400 uppercase">Margin (%)</label>
-                                <input type="number" value={margin} onChange={e => calc('margin', e.target.value)} className="w-full bg-transparent text-xl font-black text-slate-600 outline-none" />
+                            <div className="bg-slate-50 p-3 rounded-2xl">
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Margin (%)</label>
+                                <input type="number" value={margin} onChange={e => calc('margin', e.target.value)} className="w-full bg-transparent text-2xl font-black text-slate-600 outline-none" />
                             </div>
                         </div>
-                        <div className="bg-[#003399] p-5 rounded-2xl text-white flex justify-between items-center">
-                            <div><div className="text-[10px] uppercase font-bold opacity-70">Unit Profit</div><div className="text-2xl font-black">${profit.toFixed(2)}</div></div>
-                            <img src={ESSO_LOGO_URL} className="h-8 brightness-0 invert" />
+                        <div className="bg-[#003399] p-5 rounded-3xl text-white flex justify-between items-center shadow-lg">
+                            <div><div className="text-[10px] uppercase font-black opacity-60 tracking-widest">Expected Profit</div><div className="text-3xl font-black tabular-nums">${profit.toFixed(2)}</div></div>
+                            <img src={ESSO_LOGO_URL} className="h-10 brightness-0 invert" />
                         </div>
-                        <button onClick={() => onSave({ name, costPrice: parseFloat(cost), salePrice: parseFloat(sale), marginPercent: parseFloat(margin), profitAmount: profit })} className="w-full bg-[#ed1c24] text-white font-black py-4 rounded-2xl shadow-lg uppercase italic tracking-wider">Commit to Vault</button>
+                        <button onClick={() => onSave({ name, costPrice: parseFloat(cost), salePrice: parseFloat(sale), marginPercent: parseFloat(margin), profitAmount: profit })} className="w-full bg-[#ed1c24] text-white font-black py-5 rounded-2xl shadow-xl uppercase italic tracking-wider active:scale-95 transition-all">Commit to Inventory</button>
                     </div>
                 </div>
             );
         };
 
-        const Inventory = ({ items, onEdit, onDelete, onPrint }) => (
-            <div className="space-y-4 pb-20">
-                <div className="flex justify-between items-center">
-                    <h2 className="text-xl font-black text-[#003399] italic uppercase">Vault ({items.length})</h2>
-                    <button onClick={onPrint} className="bg-white px-4 py-2 rounded-full text-[10px] font-black border border-slate-200 uppercase text-[#003399]">Audit Report</button>
+        const PrintSettingsPanel = ({ settings, onUpdate }) => {
+            const updateField = (f, v) => onUpdate({ ...settings, [f]: parseFloat(v) || 0 });
+            return (
+                <div className="bg-white border-2 border-slate-100 rounded-[2rem] p-6 space-y-4 shadow-xl mb-4 animate-in slide-in-from-top-4">
+                    <div className="flex justify-between items-center mb-2">
+                        <h3 className="text-[10px] font-black uppercase text-[#003399] tracking-widest">Print Media Config</h3>
+                        <select onChange={(e) => onUpdate({ ...settings, ...AVERY_PRESETS[e.target.value] })} className="text-[10px] font-black bg-slate-50 px-2 py-1 rounded border">
+                            <option value="esso_standard">Esso Standard</option>
+                            <option value="avery_5160">Avery 5160</option>
+                            <option value="avery_5163">Avery 5163</option>
+                            <option value="avery_5164">Avery 5164</option>
+                        </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <div><label className="text-[8px] font-bold text-slate-400 uppercase">Cols</label><input type="number" value={settings.columns} onChange={e => updateField('columns', e.target.value)} className="esso-input py-2 text-xs" /></div>
+                        <div><label className="text-[8px] font-bold text-slate-400 uppercase">Rows</label><input type="number" value={settings.rows} onChange={e => updateField('rows', e.target.value)} className="esso-input py-2 text-xs" /></div>
+                        <div><label className="text-[8px] font-bold text-slate-400 uppercase">H (in)</label><input type="number" value={settings.labelHeight} onChange={e => updateField('labelHeight', e.target.value)} className="esso-input py-2 text-xs" /></div>
+                        <div><label className="text-[8px] font-bold text-slate-400 uppercase">W (in)</label><input type="number" value={settings.labelWidth} onChange={e => updateField('labelWidth', e.target.value)} className="esso-input py-2 text-xs" /></div>
+                        <div><label className="text-[8px] font-bold text-slate-400 uppercase">Font Name</label><input type="number" value={settings.fontSizeName} onChange={e => updateField('fontSizeName', e.target.value)} className="esso-input py-2 text-xs" /></div>
+                        <div><label className="text-[8px] font-bold text-slate-400 uppercase">Font Price</label><input type="number" value={settings.fontSizePrice} onChange={e => updateField('fontSizePrice', e.target.value)} className="esso-input py-2 text-xs" /></div>
+                    </div>
                 </div>
-                {items.length === 0 ? (
-                    <div className="py-20 text-center border-2 border-dashed rounded-3xl text-slate-300 font-bold uppercase text-xs">No Items in Vault</div>
-                ) : (
-                    <div className="space-y-3">
-                        {items.map(i => (
-                            <div key={i.id} className="bg-white p-4 rounded-3xl border border-slate-100 flex items-center justify-between shadow-sm">
-                                <div>
-                                    <div className="text-xs font-black uppercase text-[#003399] italic truncate w-32">{i.name}</div>
-                                    <div className="text-[10px] font-bold text-slate-400 mt-1">${i.costPrice.toFixed(2)} Cost • {i.marginPercent}% Margin</div>
+            );
+        };
+
+        const LabelLayout = ({ items, settings }) => {
+            return (
+                <div style={{ padding: `${settings.marginTop}in 0 0 ${settings.marginLeft}in`, background: 'white' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${settings.columns}, ${settings.labelWidth}in)`, gridAutoRows: `${settings.labelHeight}in`, background: 'white' }}>
+                        {items.map((item, idx) => (
+                            <div key={idx} style={{ border: '0.5pt solid #eee', padding: '15px', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', overflow: 'hidden' }}>
+                                <img src={ESSO_LOGO_URL} style={{ height: settings.labelHeight < 1.5 ? '20px' : '40px', marginBottom: '10px' }} />
+                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center' }}>
+                                    <div style={{ fontSize: `${settings.fontSizeName}px`, fontWeight: '900', fontStyle: 'italic', textTransform: 'uppercase', color: '#003399', marginBottom: '5px' }}>{item.name}</div>
+                                    <div style={{ fontSize: `${settings.fontSizePrice}px`, fontWeight: '900', fontFamily: 'Impact, sans-serif', color: '#ed1c24' }}>${item.salePrice.toFixed(2)}</div>
                                 </div>
-                                <div className="text-right">
-                                    <div className="text-lg font-black text-[#ed1c24]">${i.salePrice.toFixed(2)}</div>
-                                    <div className="flex gap-2 justify-end mt-1">
-                                        <button onClick={() => onEdit(i)} className="text-slate-300 hover:text-blue-500 font-bold text-[10px] uppercase">Edit</button>
-                                        <button onClick={() => onDelete(i.id)} className="text-slate-300 hover:text-red-500 font-bold text-[10px] uppercase">Del</button>
-                                    </div>
-                                </div>
+                                <div style={{ fontSize: '8pt', fontWeight: 'bold', textAlign: 'right', borderTop: '1pt solid #ed1c24', paddingTop: '4px' }}>RETAIL • {new Date().toLocaleDateString()}</div>
                             </div>
                         ))}
                     </div>
-                )}
-            </div>
-        );
+                </div>
+            );
+        };
 
-        const AuditReport = ({ items }) => (
+        const AuditLayout = ({ items }) => (
             <div style={{ padding: '0.5in', background: 'white', color: 'black' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '3pt solid #003399', paddingBottom: '10px' }}>
-                    <img src={ESSO_LOGO_URL} style={{ height: '40px' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '3pt solid #003399', paddingBottom: '15px', marginBottom: '20px' }}>
+                    <img src={ESSO_LOGO_URL} style={{ height: '45px' }} />
                     <div style={{ textAlign: 'right' }}>
-                        <h1 style={{ margin: 0, color: '#003399', fontSize: '20pt', fontWeight: '900', fontStyle: 'italic' }}>INVENTORY AUDIT</h1>
-                        <div style={{ fontSize: '9pt', fontWeight: 'bold' }}>{new Date().toLocaleDateString()}</div>
+                        <h1 style={{ margin: 0, color: '#003399', fontSize: '24pt', fontWeight: '900', fontStyle: 'italic' }}>INTERNAL AUDIT</h1>
+                        <div style={{ fontSize: '10pt', fontWeight: 'bold' }}>STATION REPORT: {new Date().toLocaleDateString()}</div>
                     </div>
                 </div>
-                <table style={{ width: '100%', marginTop: '30px', borderCollapse: 'collapse' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
-                        <tr style={{ borderBottom: '2pt solid #003399', background: '#f8fafc' }}>
-                            <th style={{ textAlign: 'left', padding: '10px' }}>Product</th>
-                            <th style={{ textAlign: 'right', padding: '10px' }}>Cost</th>
-                            <th style={{ textAlign: 'right', padding: '10px' }}>Retail</th>
-                            <th style={{ textAlign: 'right', padding: '10px' }}>Profit</th>
+                        <tr style={{ background: '#f8fafc', borderBottom: '2pt solid #003399' }}>
+                            <th style={{ textAlign: 'left', padding: '12px' }}>Description</th>
+                            <th style={{ textAlign: 'right', padding: '12px' }}>Cost</th>
+                            <th style={{ textAlign: 'right', padding: '12px' }}>Retail</th>
+                            <th style={{ textAlign: 'right', padding: '12px' }}>Profit</th>
                         </tr>
                     </thead>
                     <tbody>
                         {items.map(i => (
                             <tr key={i.id} style={{ borderBottom: '1pt solid #eee' }}>
-                                <td style={{ padding: '10px', fontWeight: 'bold' }}>{i.name}</td>
-                                <td style={{ textAlign: 'right', padding: '10px' }}>${i.costPrice.toFixed(2)}</td>
-                                <td style={{ textAlign: 'right', padding: '10px', color: '#ed1c24', fontWeight: 'bold' }}>${i.salePrice.toFixed(2)}</td>
-                                <td style={{ textAlign: 'right', padding: '10px', color: '#166534', fontWeight: 'bold' }}>${i.profitAmount.toFixed(2)}</td>
+                                <td style={{ padding: '12px', fontWeight: 'bold', textTransform: 'uppercase' }}>{i.name}</td>
+                                <td style={{ textAlign: 'right', padding: '12px' }}>${i.costPrice.toFixed(2)}</td>
+                                <td style={{ textAlign: 'right', padding: '12px', color: '#ed1c24', fontWeight: 'bold' }}>${i.salePrice.toFixed(2)}</td>
+                                <td style={{ textAlign: 'right', padding: '12px', color: '#166534', fontWeight: 'bold' }}>${i.profitAmount.toFixed(2)}</td>
                             </tr>
                         ))}
                     </tbody>
@@ -183,48 +200,85 @@
             </div>
         );
 
+        // --- MAIN APP ---
+
         const App = () => {
-            const [inventory, setInventory] = useState(() => JSON.parse(localStorage.getItem('esso_vault_v3') || '[]'));
+            const [inventory, setInventory] = useState(() => JSON.parse(localStorage.getItem('esso_vault_v4') || '[]'));
             const [tab, setTab] = useState('calc');
             const [editItem, setEditItem] = useState(null);
+            const [showSettings, setShowSettings] = useState(false);
+            const [settings, setSettings] = useState(AVERY_PRESETS.esso_standard);
 
-            useEffect(() => { localStorage.setItem('esso_vault_v3', JSON.stringify(inventory)); }, [inventory]);
+            useEffect(() => { localStorage.setItem('esso_vault_v4', JSON.stringify(inventory)); }, [inventory]);
 
             const save = (data) => {
-                if (editItem) {
-                    setInventory(inventory.map(i => i.id === editItem.id ? { ...i, ...data } : i));
-                    setEditItem(null);
-                } else {
-                    setInventory([{ ...data, id: Date.now() }, ...inventory]);
-                }
+                if (editItem) { setInventory(inventory.map(i => i.id === editItem.id ? { ...i, ...data } : i)); setEditItem(null); }
+                else { setInventory([{ ...data, id: Date.now() }, ...inventory]); }
                 setTab('list');
             };
 
-            const printAudit = () => {
+            const triggerPrint = (type, item = null) => {
                 const area = document.getElementById('print-area');
-                ReactDOM.createRoot(area).render(<AuditReport items={inventory} />);
+                const root = ReactDOM.createRoot(area);
+                if (type === 'audit') root.render(<AuditLayout items={inventory} />);
+                else if (type === 'label') {
+                    const printItems = item ? Array(settings.columns * settings.rows).fill(item) : inventory;
+                    root.render(<LabelLayout items={printItems} settings={settings} />);
+                }
                 setTimeout(() => { window.print(); }, 500);
             };
 
             return (
-                <div className="flex flex-col h-full max-w-lg mx-auto bg-white sm:rounded-[3rem] overflow-hidden border-0 sm:border-[12px] sm:border-slate-900 shadow-2xl relative">
+                <div className="flex flex-col h-full max-w-lg mx-auto bg-white sm:rounded-[3rem] overflow-hidden border-0 sm:border-[10px] sm:border-slate-900 shadow-2xl relative">
                     <header className="bg-[#003399] p-5 flex flex-col items-center border-b-4 border-[#ed1c24] no-print">
                         <div className="bg-white px-5 py-2 rounded-xl shadow-lg"><img src={ESSO_LOGO_URL} className="h-8" /></div>
                         <div className="text-[10px] text-white font-black mt-2 tracking-[0.4em] italic uppercase opacity-80">Retail Terminal v2.1</div>
                     </header>
 
                     <nav className="flex bg-slate-50 border-b border-slate-100 no-print">
-                        <button onClick={() => setTab('calc')} className={`flex-1 py-4 text-[11px] font-black uppercase border-b-4 transition-all ${tab === 'calc' ? 'border-[#ed1c24] text-[#003399] bg-white' : 'border-transparent text-slate-300'}`}>Console</button>
-                        <button onClick={() => { setTab('list'); setEditItem(null); }} className={`flex-1 py-4 text-[11px] font-black uppercase border-b-4 transition-all ${tab === 'list' ? 'border-[#ed1c24] text-[#003399] bg-white' : 'border-transparent text-slate-300'}`}>Vault</button>
+                        <button onClick={() => setTab('calc')} className={`flex-1 py-4 text-[11px] font-black uppercase transition-all border-b-4 ${tab === 'calc' ? 'border-[#ed1c24] text-[#003399]' : 'border-transparent text-slate-300'}`}>Console</button>
+                        <button onClick={() => { setTab('list'); setEditItem(null); }} className={`flex-1 py-4 text-[11px] font-black uppercase transition-all border-b-4 ${tab === 'list' ? 'border-[#ed1c24] text-[#003399]' : 'border-transparent text-slate-300'}`}>Vault ({inventory.length})</button>
                     </nav>
 
-                    <main className="flex-1 overflow-y-auto p-6 no-print bg-[#f8fafc]/50">
-                        {tab === 'calc' ? <PricingCalculator onSave={save} editingItem={editItem} onCancel={() => {setEditItem(null); setTab('list');}} /> : 
-                        <Inventory items={inventory} onEdit={i => { setEditItem(i); setTab('calc'); }} onDelete={id => setInventory(inventory.filter(i => i.id !== id))} onPrint={printAudit} />}
+                    <main className="flex-1 overflow-y-auto p-5 no-print bg-[#f8fafc]/50">
+                        {tab === 'calc' ? <PricingCalculator onSave={save} editingItem={editItem} onCancel={() => {setEditItem(null); setTab('list');}} /> : (
+                            <div className="space-y-4 pb-20 animate-in fade-in">
+                                <div className="flex justify-between items-center px-1">
+                                    <h2 className="text-xl font-black text-[#003399] uppercase italic">Inventory</h2>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => setShowSettings(!showSettings)} className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase border ${showSettings ? 'bg-[#003399] text-white border-[#003399]' : 'bg-white text-slate-400'}`}>Setup</button>
+                                        <button onClick={() => triggerPrint('audit')} className="bg-white px-3 py-1.5 rounded-full text-[10px] font-black border uppercase text-[#003399]">Audit</button>
+                                    </div>
+                                </div>
+
+                                {showSettings && <PrintSettingsPanel settings={settings} onUpdate={setSettings} />}
+
+                                {inventory.length === 0 ? <div className="py-20 text-center border-2 border-dashed rounded-3xl text-slate-300 font-bold uppercase text-xs">Empty Vault</div> : (
+                                    <div className="space-y-3">
+                                        {inventory.map(i => (
+                                            <div key={i.id} className="bg-white p-4 rounded-3xl border border-slate-100 flex items-center justify-between shadow-sm hover:border-[#ed1c24]/20 transition-all">
+                                                <div className="flex-1 min-w-0 pr-2">
+                                                    <div className="text-xs font-black uppercase text-[#003399] italic truncate">{i.name}</div>
+                                                    <div className="text-[10px] font-bold text-slate-400 mt-1">${i.costPrice.toFixed(2)} Cost • {i.marginPercent}% Margin</div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-xl font-black text-[#ed1c24]">${i.salePrice.toFixed(2)}</div>
+                                                    <div className="flex gap-2 justify-end mt-1">
+                                                        <button onClick={() => triggerPrint('label', i)} className="text-green-600 hover:underline font-black text-[9px] uppercase">Print</button>
+                                                        <button onClick={() => {setEditItem(i); setTab('calc');}} className="text-[#003399] hover:underline font-black text-[9px] uppercase">Edit</button>
+                                                        <button onClick={() => setInventory(inventory.filter(x => x.id !== i.id))} className="text-slate-300 hover:text-red-500 font-black text-[9px] uppercase">Del</button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </main>
 
-                    <footer className="p-4 text-center border-t border-slate-50 no-print shrink-0 bg-white">
-                        <div className="text-[9px] font-black text-[#003399] uppercase opacity-40 italic">Esso Proprietary Station System</div>
+                    <footer className="p-4 text-center border-t border-slate-50 no-print bg-white absolute bottom-0 w-full">
+                        <div className="text-[9px] font-black text-[#003399] uppercase opacity-40 italic">Esso Terminal Retail Suite • Karan Sekar AI</div>
                     </footer>
                 </div>
             );
