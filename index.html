@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Esso Retail Terminal v2.1</title>
+    
+    <!-- Stable Production Dependencies -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@0.475.0/dist/umd/lucide.min.js"></script>
+    
+    <style>
+        :root { --esso-red: #ed1c24; --esso-blue: #003399; }
+        body, html { margin: 0; padding: 0; background-color: #f1f5f9; font-family: sans-serif; height: 100%; overflow: hidden; }
+        #root { height: 100%; }
+
+        @media print {
+            body { background: white !important; overflow: visible !important; }
+            .no-print { display: none !important; }
+            #print-area { display: block !important; position: absolute; top: 0; left: 0; width: 100%; }
+            @page { margin: 0.5in; size: auto; }
+        }
+
+        #print-area { display: none; background: white; }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/"
+  }
+}
+</script>
+</head>
+<body>
+    <div id="root"></div>
+    <div id="print-area"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // Helper to get Lucide Icons safely
+        const Icon = ({ name, size = 16, className = "" }) => {
+            const [svg, setSvg] = useState("");
+            useEffect(() => {
+                if (window.lucide) {
+                    const iconSvg = window.lucide.createIcons();
+                }
+            }, []);
+            return <i data-lucide={name} style={{ width: size, height: size }} className={className}></i>;
+        };
+
+        const ESSO_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/2/22/Esso_textlogo.svg";
+
+        const PricingCalculator = ({ onSave, editingItem, onCancel }) => {
+            const [name, setName] = useState('');
+            const [cost, setCost] = useState('');
+            const [sale, setSale] = useState('');
+            const [margin, setMargin] = useState('');
+
+            useEffect(() => {
+                if (editingItem) {
+                    setName(editingItem.name);
+                    setCost(editingItem.costPrice.toString());
+                    setSale(editingItem.salePrice.toString());
+                    setMargin(editingItem.marginPercent.toString());
+                } else {
+                    setName(''); setCost(''); setSale(''); setMargin('');
+                }
+            }, [editingItem]);
+
+            const calc = (type, val) => {
+                const n = parseFloat(val) || 0;
+                if (type === 'cost') {
+                    setCost(val);
+                    if (margin) setSale((n / (1 - parseFloat(margin)/100)).toFixed(2));
+                } else if (type === 'sale') {
+                    setSale(val);
+                    if (cost && n > 0) setMargin(((n - parseFloat(cost)) / n * 100).toFixed(2));
+                } else if (type === 'margin') {
+                    setMargin(val);
+                    if (cost) setSale((parseFloat(cost) / (1 - n/100)).toFixed(2));
+                }
+            };
+
+            const profit = (parseFloat(sale) || 0) - (parseFloat(cost) || 0);
+
+            return (
+                <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-xl font-black text-[#003399] italic uppercase italic">Pricing Console</h2>
+                        {editingItem && <button onClick={onCancel} className="text-[10px] font-bold text-slate-400 border px-2 py-1 rounded">Discard</button>}
+                    </div>
+                    <div className="bg-white p-6 rounded-[2rem] shadow-xl space-y-4 border border-slate-100">
+                        <input type="text" placeholder="Product Name" value={name} onChange={e => setName(e.target.value)} className="w-full bg-slate-50 p-4 rounded-2xl border-2 border-slate-100 font-bold focus:border-[#003399] outline-none" />
+                        <div className="space-y-3">
+                            <div className="bg-slate-50 p-3 rounded-xl">
+                                <label className="text-[9px] font-black text-slate-400 uppercase">Unit Cost ($)</label>
+                                <input type="number" value={cost} onChange={e => calc('cost', e.target.value)} className="w-full bg-transparent text-xl font-black text-[#003399] outline-none" />
+                            </div>
+                            <div className="bg-[#ed1c24]/5 p-3 rounded-xl border-2 border-[#ed1c24]/20">
+                                <label className="text-[9px] font-black text-[#ed1c24] uppercase">Retail Price ($)</label>
+                                <input type="number" value={sale} onChange={e => calc('sale', e.target.value)} className="w-full bg-transparent text-xl font-black text-[#ed1c24] outline-none" />
+                            </div>
+                            <div className="bg-slate-50 p-3 rounded-xl">
+                                <label className="text-[9px] font-black text-slate-400 uppercase">Margin (%)</label>
+                                <input type="number" value={margin} onChange={e => calc('margin', e.target.value)} className="w-full bg-transparent text-xl font-black text-slate-600 outline-none" />
+                            </div>
+                        </div>
+                        <div className="bg-[#003399] p-5 rounded-2xl text-white flex justify-between items-center">
+                            <div><div className="text-[10px] uppercase font-bold opacity-70">Unit Profit</div><div className="text-2xl font-black">${profit.toFixed(2)}</div></div>
+                            <img src={ESSO_LOGO_URL} className="h-8 brightness-0 invert" />
+                        </div>
+                        <button onClick={() => onSave({ name, costPrice: parseFloat(cost), salePrice: parseFloat(sale), marginPercent: parseFloat(margin), profitAmount: profit })} className="w-full bg-[#ed1c24] text-white font-black py-4 rounded-2xl shadow-lg uppercase italic tracking-wider">Commit to Vault</button>
+                    </div>
+                </div>
+            );
+        };
+
+        const Inventory = ({ items, onEdit, onDelete, onPrint }) => (
+            <div className="space-y-4 pb-20">
+                <div className="flex justify-between items-center">
+                    <h2 className="text-xl font-black text-[#003399] italic uppercase">Vault ({items.length})</h2>
+                    <button onClick={onPrint} className="bg-white px-4 py-2 rounded-full text-[10px] font-black border border-slate-200 uppercase text-[#003399]">Audit Report</button>
+                </div>
+                {items.length === 0 ? (
+                    <div className="py-20 text-center border-2 border-dashed rounded-3xl text-slate-300 font-bold uppercase text-xs">No Items in Vault</div>
+                ) : (
+                    <div className="space-y-3">
+                        {items.map(i => (
+                            <div key={i.id} className="bg-white p-4 rounded-3xl border border-slate-100 flex items-center justify-between shadow-sm">
+                                <div>
+                                    <div className="text-xs font-black uppercase text-[#003399] italic truncate w-32">{i.name}</div>
+                                    <div className="text-[10px] font-bold text-slate-400 mt-1">${i.costPrice.toFixed(2)} Cost • {i.marginPercent}% Margin</div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-lg font-black text-[#ed1c24]">${i.salePrice.toFixed(2)}</div>
+                                    <div className="flex gap-2 justify-end mt-1">
+                                        <button onClick={() => onEdit(i)} className="text-slate-300 hover:text-blue-500 font-bold text-[10px] uppercase">Edit</button>
+                                        <button onClick={() => onDelete(i.id)} className="text-slate-300 hover:text-red-500 font-bold text-[10px] uppercase">Del</button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        );
+
+        const AuditReport = ({ items }) => (
+            <div style={{ padding: '0.5in', background: 'white', color: 'black' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '3pt solid #003399', paddingBottom: '10px' }}>
+                    <img src={ESSO_LOGO_URL} style={{ height: '40px' }} />
+                    <div style={{ textAlign: 'right' }}>
+                        <h1 style={{ margin: 0, color: '#003399', fontSize: '20pt', fontWeight: '900', fontStyle: 'italic' }}>INVENTORY AUDIT</h1>
+                        <div style={{ fontSize: '9pt', fontWeight: 'bold' }}>{new Date().toLocaleDateString()}</div>
+                    </div>
+                </div>
+                <table style={{ width: '100%', marginTop: '30px', borderCollapse: 'collapse' }}>
+                    <thead>
+                        <tr style={{ borderBottom: '2pt solid #003399', background: '#f8fafc' }}>
+                            <th style={{ textAlign: 'left', padding: '10px' }}>Product</th>
+                            <th style={{ textAlign: 'right', padding: '10px' }}>Cost</th>
+                            <th style={{ textAlign: 'right', padding: '10px' }}>Retail</th>
+                            <th style={{ textAlign: 'right', padding: '10px' }}>Profit</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {items.map(i => (
+                            <tr key={i.id} style={{ borderBottom: '1pt solid #eee' }}>
+                                <td style={{ padding: '10px', fontWeight: 'bold' }}>{i.name}</td>
+                                <td style={{ textAlign: 'right', padding: '10px' }}>${i.costPrice.toFixed(2)}</td>
+                                <td style={{ textAlign: 'right', padding: '10px', color: '#ed1c24', fontWeight: 'bold' }}>${i.salePrice.toFixed(2)}</td>
+                                <td style={{ textAlign: 'right', padding: '10px', color: '#166534', fontWeight: 'bold' }}>${i.profitAmount.toFixed(2)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        );
+
+        const App = () => {
+            const [inventory, setInventory] = useState(() => JSON.parse(localStorage.getItem('esso_vault_v3') || '[]'));
+            const [tab, setTab] = useState('calc');
+            const [editItem, setEditItem] = useState(null);
+
+            useEffect(() => { localStorage.setItem('esso_vault_v3', JSON.stringify(inventory)); }, [inventory]);
+
+            const save = (data) => {
+                if (editItem) {
+                    setInventory(inventory.map(i => i.id === editItem.id ? { ...i, ...data } : i));
+                    setEditItem(null);
+                } else {
+                    setInventory([{ ...data, id: Date.now() }, ...inventory]);
+                }
+                setTab('list');
+            };
+
+            const printAudit = () => {
+                const area = document.getElementById('print-area');
+                ReactDOM.createRoot(area).render(<AuditReport items={inventory} />);
+                setTimeout(() => { window.print(); }, 500);
+            };
+
+            return (
+                <div className="flex flex-col h-full max-w-lg mx-auto bg-white sm:rounded-[3rem] overflow-hidden border-0 sm:border-[12px] sm:border-slate-900 shadow-2xl relative">
+                    <header className="bg-[#003399] p-5 flex flex-col items-center border-b-4 border-[#ed1c24] no-print">
+                        <div className="bg-white px-5 py-2 rounded-xl shadow-lg"><img src={ESSO_LOGO_URL} className="h-8" /></div>
+                        <div className="text-[10px] text-white font-black mt-2 tracking-[0.4em] italic uppercase opacity-80">Retail Terminal v2.1</div>
+                    </header>
+
+                    <nav className="flex bg-slate-50 border-b border-slate-100 no-print">
+                        <button onClick={() => setTab('calc')} className={`flex-1 py-4 text-[11px] font-black uppercase border-b-4 transition-all ${tab === 'calc' ? 'border-[#ed1c24] text-[#003399] bg-white' : 'border-transparent text-slate-300'}`}>Console</button>
+                        <button onClick={() => { setTab('list'); setEditItem(null); }} className={`flex-1 py-4 text-[11px] font-black uppercase border-b-4 transition-all ${tab === 'list' ? 'border-[#ed1c24] text-[#003399] bg-white' : 'border-transparent text-slate-300'}`}>Vault</button>
+                    </nav>
+
+                    <main className="flex-1 overflow-y-auto p-6 no-print bg-[#f8fafc]/50">
+                        {tab === 'calc' ? <PricingCalculator onSave={save} editingItem={editItem} onCancel={() => {setEditItem(null); setTab('list');}} /> : 
+                        <Inventory items={inventory} onEdit={i => { setEditItem(i); setTab('calc'); }} onDelete={id => setInventory(inventory.filter(i => i.id !== id))} onPrint={printAudit} />}
+                    </main>
+
+                    <footer className="p-4 text-center border-t border-slate-50 no-print shrink-0 bg-white">
+                        <div className="text-[9px] font-black text-[#003399] uppercase opacity-40 italic">Esso Proprietary Station System</div>
+                    </footer>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
